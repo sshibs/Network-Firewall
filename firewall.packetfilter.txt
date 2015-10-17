@@ -1,0 +1,202 @@
+#!/bin/bash
+
+
+echo "Setting up variables"
+# VARIABLES TO CUSTOMISE TO MATCH YOUR NETWORK
+LAN="eth0"
+LAN_SUBNET="192.168.1.0/24"
+DHCP_RANGE="192.168.1.10-192.168.1.20"
+DNS_SERVER1="8.8.8.8"
+DNS_SERVER2="208.67.222.222"
+RSS="192.168.1.3"
+MODEM_ROUTER="192.168.1.1"
+UNPRIV_PORTS="1024:65535"
+SSH="22222"
+NTP_SERVER="65.55.21.22"
+
+echo "Flushing existing chains and rules..."
+# FLUSHING CHAINS & RULES
+# 	-t = table
+#	filter is default table. (INPUT FORWARD OUTPUT)
+iptables -t filter -F # -F = flush chain
+iptables -t filter -X # -X = delete chain
+#	nat is when pakcet that creates a new connection is encountered. (PREROUTING OUTPUT POSTROUTING)
+iptables -t nat -F
+iptables -t nat -X
+#	mangle  is for specialized packet alteration (PREROUTING OUTPUT INPUT FORWARD POSTROUTING)
+iptables -t mangle -F
+iptables -t mangle -X
+
+echo "Setting up default policies"
+# DEFAULT POLICIES
+#	-P policy: set the policy for the chain to the given target
+iptables -P INPUT DROP
+iptables -P OUTPUT DROP
+iptables -P FORWARD DROP
+
+# LOOPBACK
+#	-A append: append rules to end of chain
+iptables -A INPUT -i lo -j ACCEPT # -i interface, -j jump
+iptables -A OUTPUT -o lo -j ACCEPT
+
+echo "Creating chains"
+
+# CHAIN TO CHECK, LOG, AND OPTIMISE
+# -N new chain: create new user-defined chain
+iptables -N CHECK_TCP_FLAGS
+iptables -N LOGDROP_TCP_FLAGS
+iptables -t mangle -N FAST_DNS
+
+echo "Loading rules"
+#################################
+# PROTOCOL CHECK & OPTIMIZATION #
+##############################################################################################
+# append FORWARD to lan interface with tcp protocol ipv4 jump to check tcp flags
+iptables -A FORWARD -i $LAN -p tcp --ipv4 -j CHECK_TCP_FLAGS
+# append INPUT with lan interface with tcp protocol and ipv4 jump to check tcp flags
+iptables -A INPUT -i $LAN -p tcp --ipv4 -j CHECK_TCP_FLAGS
+
+# append to mangle table OUTPUT out interface lan protocol tcp ipv4 source RSS match pkttype
+iptables -t mangle -A OUTPUT -o $LAN -p tcp --ipv4 -s $RSS -m pkttype --pkt-type unicast --dport domain \
+-m state --state NEW,ESTABLISHED,RELATED -j FAST_DNS
+
+iptables -t mangle -A OUTPUT -o $LAN -p udp --ipv4 -s $RSS -m pkttype --pkt-type unicast --dport domain \
+-m state --state NEW,ESTABLISHED,RELATED -j FAST_DNS
+##############################################################################################
+
+###################
+# CHECK_TCP_FLAGS #
+##############################################################################################
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ACK,FIN FIN -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ACK,PSH PSH -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ACK,URG URG -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags FIN,RST FIN,RST -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags SYN,FIN SYN,FIN -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags SYN,RST SYN,RST -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ALL ALL -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ALL NONE -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ALL FIN,PSH,URG -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ALL SYN,FIN,PSH,URG -j LOGDROP_TCP_FLAGS
+iptables -A CHECK_TCP_FLAGS -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j LOGDROP_TCP_FLAGS
+
+iptables -A LOGDROP_TCP_FLAGS -m limit --limit 1/s -j LOG --log-tcp-options --log-prefix \
+"[IPTABLES: BAD TCP FLAGS]"
+
+iptables -A LOGDROP_TCP_FLAGS -j DROP
+##############################################################################################
+
+############
+# FAST_DNS #
+##############################################################################################
+iptables -t mangle -A FAST_DNS -p udp -d $DNS_SERVER1 -j TOS --set-tos Minimize-Delay
+iptables -t mangle -A FAST_DNS -p udp -d $DNS_SERVER2 -j TOS --set-tos Minimize-Delay
+iptables -t mangle -A FAST_DNS -p tcp -d $DNS_SERVER1 -j TOS --set-tos Minimize-Delay
+iptables -t mangle -A FAST_DNS -p tcp -d $DNS_SERVER2 -j TOS --set-tos Minimize-Delay
+##############################################################################################
+
+#######
+# NAT #
+##############################################################################################
+iptables -t nat -A POSTROUTING -o $LAN ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED -j MASQUERADE\
+--random
+##############################################################################################
+
+###########
+# FORWARD #
+##############################################################################################
+# Allow outgoing forward of any connection
+iptables -A FORWARD -p tcp -i $LAN -s $LAN_SUBNET ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED \
+-j ACCEPT
+
+iptables -A FORWARD -p udp -i $LAN -s $LAN_SUBNET ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED \
+-j ACCEPT
+
+iptables -A FORWARD -p icmp -i $LAN -s $LAN_SUBNET ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED \
+-j ACCEPT
+
+# Allow incoming forward of established or related connections with TTL greater than 10
+iptables -A FORWARD -p tcp -i $LAN ! -s $LAN_SUBNET -d $LAN_SUBNET -m state --state ESTABLISHED,RELATED -m \
+ttl --ttl-gt 10 -j ACCEPT
+
+iptables -A FORWARD -p udp -i $LAN ! -s $LAN_SUBNET -d $LAN_SUBNET -m state --state ESTABLISHED,RELATED -m \
+ttl --ttl-gt 10 -j ACCEPT
+
+iptables -A FORWARD -p icmp -i $LAN ! -s $LAN_SUBNET -d $LAN_SUBNET -m state --state ESTABLISHED,RELATED -m \
+ttl --ttl-gt 10 -j ACCEPT
+##############################################################################################
+
+#########
+# INPUT #
+##############################################################################################
+# Allow DHCP broadcasts from the inside
+iptables -A INPUT -i $LAN -p udp -s $LAN_SUBNET --sport 67:68 --dport 67:68 -j ACCEPT
+
+# Allow DNS queries from the LAN to the Raspberry
+iptables -A INPUT -i $LAN -p udp -s $LAN_SUBNET --sport $UNPRIV_PORTS -d $RSS --dport 53 -j ACCEPT
+iptables -A INPUT -i $LAN -p tcp -s $LAN_SUBNET --sport $UNPRIV_PORTS -d $RSS --dport 53 -j ACCEPT
+
+# SSH connections
+iptables -A INPUT -i $LAN -p tcp -s $LAN_SUBNET --sport $UNPRIV_PORTS -d $RSS --dport $SSH -j ACCEPT
+
+# ICMP LAN (Type 3 = unreachable [destination|port|protocol])
+iptables -A INPUT -p icmp -m icmp --icmp-type echo-request -s $LAN_SUBNET -d $RSS -j ACCEPT
+iptables -A INPUT -p icmp -m icmp --icmp-type 3 -s $LAN_SUBNET -d $RSS -j ACCEPT
+
+# Allow already established connections from Raspberry to Internet to come back to itl
+iptables -A INPUT -i $LAN ! -s $LAN_SUBNET -d $RSS -p tcp -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -i $LAN ! -s $LAN_SUBNET -d $RSS -p udp -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -i $LAN ! -s $LAN_SUBNET -d $RSS -p icmp -m state --state ESTABLISHED,RELATED -j ACCEPT
+##############################################################################################
+
+###########
+# OUTPUT #
+##############################################################################################
+# Block potential ICMP redirect sent from us (could be caused by a misconfigured sysctl)
+iptables -A OUTPUT -o $LAN -p icmp -m icmp --icmp-type redirect -m limit --limit 1/s -j LOG --log-prefix \
+"[IPTABLES: ICMP REDIRECT]"
+
+iptables -A OUTPUT -o $LAN -p icmp -m icmp --icmp-type redirect -j DROP
+
+# Allow LAN established connections to the Raspi to come back to the LAN
+iptables -A OUTPUT -o $LAN -p tcp -s $RSS -d $LAN_SUBNET -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -o $LAN -p udp -s $RSS -d $LAN_SUBNET -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -o $LAN -p icmp -s $RSS -d $LAN_SUBNET -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Allow DHCP related traffic
+iptables -A OUTPUT -o $LAN -p udp -s $RSS -d $LAN_SUBNET --sport 67:68 --dport 67:68 -j ACCEPT
+
+# Allow Raspberry to ping the LAN
+iptables -A OUTPUT -o $LAN -p icmp -m icmp --icmp-type echo-request -s $RSS -d $LAN_SUBNET -m state \
+--state NEW -j ACCEPT
+
+# Allow new connections from Raspberry (necessary for updates, installing packages, etc...)
+iptables -A OUTPUT -o $LAN -p tcp -s $RSS ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED \
+-j ACCEPT
+
+iptables -A OUTPUT -o $LAN -p udp -s $RSS ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED \
+-j ACCEPT
+
+iptables -A OUTPUT -o $LAN -p icmp -s $RSS ! -d $LAN_SUBNET -m state --state NEW,ESTABLISHED,RELATED \
+-j ACCEPT
+
+# DNS requests
+iptables -A OUTPUT -o $LAN -p udp -s $RSS --sport $UNPRIV_PORTS -d $DNS_SERVER1 --dport domain -j ACCEPT
+iptables -A OUTPUT -o $LAN -p udp -s $RSS --sport $UNPRIV_PORTS -d $DNS_SERVER2 --dport domain -j ACCEPT
+iptables -A OUTPUT -o $LAN -p tcp -s $RSS --sport $UNPRIV_PORTS -d $DNS_SERVER1 --dport domain -j ACCEPT
+iptables -A OUTPUT -o $LAN -p tcp -s $RSS --sport $UNPRIV_PORTS -d $DNS_SERVER2 --dport domain -j ACCEPT
+# Allow NTP
+iptables -A OUTPUT -o $LAN -p udp --dport ntp -s $RSS -j ACCEPT
+##############################################################################################
+
+iptables -A INPUT -m limit --limit 1/s -j LOG --log-prefix "[IPTABLES: INPUT DROP]"
+iptables -A INPUT -j DROP
+iptables -A OUTPUT -m limit --limit 1/s -j LOG --log-prefix "[IPTABLES: OUTPUT DROP]"
+iptables -A OUTPUT -j DROP
+iptables -A FORWARD -m limit --limit 1/s -j LOG --log-prefix "[IPTABLES: FORWARD DROP]"
+iptables -A FORWARD -j DROP
+
+## RULES END ##
+rules_number=`egrep '\-j' /etc/firewall.simple | wc -l`
+echo ""
+echo "$rules_number rules loaded."
+echo ""
