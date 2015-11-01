@@ -1,0 +1,125 @@
+#!/bin/bash
+
+
+#######################
+# FLOW IDENTIFICATION #
+##############################################################################################
+# NAT_OUT
+iptables -t nat -A POSTROUTING -o $LAN -p tcp --ipv4 -m iprange \
+--src-range $DHCP_RANGE ! --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --dst-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j NAT_OUT
+
+iptables -t nat -A POSTROUTING -o $LAN -p udp --ipv4 -m iprange \
+--src-range $DHCP_RANGE ! --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --dst-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j NAT_OUT
+
+iptables -t nat -A POSTROUTING -o $LAN -p icmp --ipv4 -m iprange \
+--src-range $DHCP_RANGE ! --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --dst-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j NAT_OUT
+
+# FORWARD_OUT
+iptables -A FORWARD -i $LAN -p tcp --ipv4 -m iprange \
+--src-range $DHCP_RANGE ! --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --src-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j FORWARD_OUT
+
+iptables -A FORWARD -i $LAN -p udp --ipv4 -m iprange \
+--src-range $DHCP_RANGE ! --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --src-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j FORWARD_OUT
+
+iptables -A FORWARD -i $LAN -p icmp --ipv4 -m iprange \
+--src-range $DHCP_RANGE ! --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --src-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j FORWARD_OUT
+
+# FORWARD_IN
+iptables -A FORWARD -i $LAN -p tcp --ipv4 -m iprange \
+! --src-range $DHCP_RANGE --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --src-type LOCAL\
+-m state --state ESTABLISHED,RELATED -j FORWARD_IN
+
+iptables -A FORWARD -i $LAN -p udp --ipv4 -m iprange \
+! --src-range $DHCP_RANGE --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --src-type LOCAL\
+-m state --state ESTABLISHED,RELATED -j FORWARD_IN
+
+iptables -A FORWARD -i $LAN -p icmp --ipv4 -m iprange \
+! --src-range $DHCP_RANGE --dst-range $DHCP_RANGE -m pkttype --pkt-type unicast -m addrtype ! --src-type LOCAL\
+-m state --state ESTABLISHED,RELATED -j FORWARD_IN
+
+# LAN_IN
+iptables -A INPUT -i $LAN -p tcp --ipv4 -m iprange \
+--src-range $DHCP_RANGE -d $RSS -m pkttype --pkt-type unicast -m addrtype --dst-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j LAN_IN
+
+iptables -A INPUT -i $LAN -p udp --ipv4 -m iprange \
+--src-range $DHCP_RANGE -d $RSS -m pkttype --pkt-type unicast -m addrtype --dst-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j LAN_IN
+
+iptables -A INPUT -i $LAN -p icmp --ipv4 -m iprange \
+--src-range $DHCP_RANGE -d $RSS -m pkttype --pkt-type unicast -m addrtype --dst-type LOCAL\
+-m state --state NEW,ESTABLISHED,RELATED -j LAN_IN
+
+# LAN_BROADCAST
+iptables -A INPUT -i $LAN -p tcp --ipv4 \
+! -d $RSS -m pkttype --pkt-type broadcast -m addrtype --dst-type BROADCAST\
+
+-m state ! --state INVALID -j LAN_BROADCAST
+
+iptables -A INPUT -i $LAN -p udp --ipv4 \
+! -d $RSS -m pkttype --pkt-type broadcast -m addrtype --dst-type BROADCAST\
+-m state ! --state INVALID -j LAN_BROADCAST
+
+iptables -A INPUT -i $LAN -p icmp --ipv4 \
+! -d $RSS -m pkttype --pkt-type broadcast -m addrtype --dst-type BROADCAST\
+-m state ! --state INVALID -j LAN_BROADCAST
+
+# INTERNET_GATEWAY
+iptables -A INPUT -i $LAN -p tcp --ipv4 \
+! -s $LAN_SUBNET -d $RSS -m pkttype --pkt-type unicast -m addrtype --dst-type LOCAL\
+-m state --state ESTABLISHED,RELATED -j INTERNET_GATEWAY
+
+iptables -A INPUT -i $LAN -p udp --ipv4 ! \
+-s $LAN_SUBNET -d $RSS -m pkttype --pkt-type unicast -m addrtype --dst-type LOCAL\
+-m state --state ESTABLISHED,RELATED -j INTERNET_GATEWAY
+
+iptables -A INPUT -i $LAN -p icmp --ipv4 \
+! -s $LAN_SUBNET -d $RSS -m pkttype --pkt-type unicast -m addrtype --dst-type LOCAL\
+-m state --state ESTABLISHED,RELATED -j INTERNET_GATEWAY
+
+# GATEWAY_LAN
+iptables -A OUTPUT -o $LAN -p tcp --ipv4 \
+-s $RSS -d $LAN_SUBNET -m pkttype --pkt-type unicast -m addrtype --dst-type UNICAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_LAN
+
+iptables -A OUTPUT -o $LAN -p udp --ipv4 \
+-s $RSS -d $LAN_SUBNET -m pkttype --pkt-type unicast -m addrtype --dst-type UNICAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_LAN
+
+iptables -A OUTPUT -o $LAN -p icmp --ipv4 \
+-s $RSS -d $LAN_SUBNET -m pkttype --pkt-type unicast -m addrtype --dst-type UNICAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_LAN
+
+# GATEWAY_BROADCAST
+iptables -A OUTPUT -o $LAN -p tcp --ipv4 \
+-s $RSS -m pkttype --pkt-type broadcast -m addrtype --dst-type BROADCAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_BROADCAST
+
+iptables -A OUTPUT -o $LAN -p udp --ipv4 \
+-s $RSS -m pkttype --pkt-type broadcast -m addrtype --dst-type BROADCAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_BROADCAST
+
+iptables -A OUTPUT -o $LAN -p icmp --ipv4 \
+-s $RSS -m pkttype --pkt-type broadcast -m addrtype --dst-type BROADCAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_BROADCAST
+
+# GATEWAY_INTERNET
+iptables -A OUTPUT -o $LAN -p tcp --ipv4 \
+-s $RSS ! -d $LAN_SUBNET -m pkttype --pkt-type unicast -m addrtype --dst-type UNICAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_INTERNET
+
+iptables -A OUTPUT -o $LAN -p udp --ipv4 \
+-s $RSS ! -d $LAN_SUBNET -m pkttype --pkt-type unicast -m addrtype --dst-type UNICAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_INTERNET
+
+iptables -A OUTPUT -o $LAN -p icmp --ipv4 \
+-s $RSS ! -d $LAN_SUBNET -m pkttype --pkt-type unicast -m addrtype --dst-type UNICAST\
+-m state --state NEW,ESTABLISHED,RELATED -j GATEWAY_INTERNET
+
+##############################################################################################

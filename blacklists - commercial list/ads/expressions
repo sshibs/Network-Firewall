@@ -1,0 +1,5 @@
+(/ads/|/ad/|/banner/|/sponsor/|/event.ng/|/Advertisement/|adverts/)
+(/cgi-bin/nph-adclick\.exe|/ads/media/images/|/smartbanner/|\.com/ads/banners/|/apfbanners/|/realmedia/ads/|/event\.ng/)
+(/cgi-bin/nph-adclick\.exe|/ads/media/images/|/smartbanner/|\.com/ads/banners/|/apfbanners/|/realmedia/ads/|/event\.ng/|/pics/banner/|/viewcgi?pool=|/clicktrack|/hittrack|/images\.go2net\.com/go2net/ads/|\.com/banners/|\.com/httpads/|\.com/advertising/|/ads/adview\.php\?)
+(/pics/banner/|/viewcgi?pool=|/clicktrack|/hittrack|/images\.go2net\.com/go2net/ads/|\.com/banners/|\.com/httpads/|\.com/advertising/|/ads/adview\.php\?)
+^(ads\.|ad\.|adserver\.|k5ads\.)
