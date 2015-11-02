@@ -1,1 +1,1 @@
-These files are related to configuration on the pi for connecting to the router
+These files are related to configuration on the pi for the different network interfaces
