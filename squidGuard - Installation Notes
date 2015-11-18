@@ -1,0 +1,40 @@
+installation steps needed to install squidguard
+-------------------------------------------------------------------------------
+required for squidguard-
+wget http://download.oracle.com/berkeley-db/db-6.1.26.tar.gz
+tar xvzf db-6.1.26.tar.gz 
+
+ran  below:
+../dist/configure --prefix=/usr      \
+                  --enable-compat185 \
+                  --enable-dbm       \
+                  --disable-static   \
+                  --enable-cxx
+make
+
+then as root ran:
+make docdir=/usr/share/doc/db-6.1.26 install &&
+
+chown -v -R root:root                        \
+      /usr/bin/db_*                          \
+      /usr/include/db{,_185,_cxx}.h          \
+      /usr/lib/libdb*.{so,la}                \
+      /usr/share/doc/db-6.1.26
+-------------------------------------------------------------------------------
+dl-the current stable version:
+wget http://www.squidguard.org/Downloads/squidGuard-1.4.tar.gz
+tar xvzf squidGuard-1.4.tar.gz
+cd squidGuard-1.4
+./configure
+make
+
+./configure --with-squiduser=bobAdmin
+
+make install
+
+cp /path/to/your/blacklist.tar.gz /usr/local/squidGuard/db
+cd /usr/local/squidGuard/db
+gzip -d blacklist.tar.gz
+tar xfv blacklist.tar
+
+-------------------------------------------------------------------------------
