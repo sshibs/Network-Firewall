@@ -1,0 +1,14 @@
+These links contain information on blocking DOS and DDOS attacks...
+
+DOS:
+http://crybit.com/prevent-dos-attack/
+http://blog.bodhizazen.net/linux/prevent-dos-with-iptables/
+http://serverfault.com/questions/410604/iptables-rules-to-counter-the-most-common-dos-attacks
+http://linoxide.com/firewall/block-common-attacks-iptables/
+http://blog.stickpoll.me/stop-ddos-attack-with-iptables/
+http://bipinkdas.blogspot.com/2008/09/prevent-dos-attack-in-linux.html
+
+DDOS:
+http://rockdio.org/ayudatech/how-to-stop-small-ddos-attacks-some-basic-security-advice/
+https://www.liquidcomm.net/how-to-manage-a-ddos-or-dos-attempt-directed-at-your-linux-server.html
+http://linoxide.com/firewall/how-to-ddos-in-linux/
