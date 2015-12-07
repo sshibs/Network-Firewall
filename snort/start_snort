@@ -1,0 +1,1 @@
+snort -de -l /etc/snort/snort_logs -c /etc/snort/snort.conf
